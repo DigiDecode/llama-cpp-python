@@ -41,6 +41,8 @@ from llama_cpp.server.types import (
     DetokenizeInputResponse,
 )
 from llama_cpp.server.errors import RouteErrorHandler
+from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+from mistral_common.tokens.instruct.request import FIMRequest
 
 
 router = APIRouter(route_class=RouteErrorHandler)
@@ -263,6 +265,38 @@ async def create_completion(
     if isinstance(body.prompt, list):
         assert len(body.prompt) <= 1
         body.prompt = body.prompt[0] if len(body.prompt) > 0 else ""
+
+    prompt = body.prompt
+    prompt = prompt.replace('[SUFFIX]','')
+    
+    print(f'##### PROMPT#:\n{json.dumps(body.prompt)}\n\n')
+    print(f'##### SUFFIX#:\n{json.dumps(body.suffix)}\n\n')
+    print(f'##### STOP REPR#:\n')
+    if body.stop is not None:
+        for s in body.stop: print(repr(s))
+        print(f'##### STOP#:\n')
+        for s in body.stop: print(s)
+        print(f'\n\n')
+
+    body.stop = ['[PREFIX]','[/PREFIX]', '</s>', '[SUFFIX]', '[MIDDLE]']
+
+    tokenizer = MistralTokenizer.v3()
+    
+    if '[PREFIX]' in prompt:
+        prompt_parts = prompt.split('[PREFIX]')
+        prefix = prompt_parts[1] if len(prompt_parts) > 0 else ''
+        postfix = prompt_parts[0]
+    else:
+        prefix = prompt
+        postfix = ''
+
+    fim_request = FIMRequest(prompt=prefix, suffix=postfix)
+    fim_tokens = tokenizer.encode_fim(fim_request)
+    body.prompt = fim_tokens.text
+
+    print(f'##### prefix#:\n{repr(prefix)}\n\n')
+    print(f'##### postfix#:\n{repr(postfix)}\n\n')
+    print(f'##### fim_tokens.tex#:\n{repr(fim_tokens.text)}\n\n')
 
     llama = llama_proxy(
         body.model
